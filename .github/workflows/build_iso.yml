@@ -5,21 +5,24 @@ jobs:
   build_iso:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-    - name: Cache FreeBSD Objects
-      uses: actions/cache@v4
-      with:
-        path: /usr/obj
-        key: freebsd-obj-${{ github.sha }}
-        restore-keys: |
-          freebsd-obj-
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache FreeBSD Objects
+        uses: actions/cache@v4
+        with:
+          path: /usr/obj
+          # Этот ключ заставит GitHub искать прошлые успешные части сборки
+          key: freebsd-obj-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            freebsd-obj-${{ runner.os }}-
+            freebsd-obj-
 
       - name: Build Everything and Make ISO
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
           sync: true
-          # Увеличиваем память, чтобы сборка не вылетела
           mem: 8192
           prepare: |
             pkg install -y git-lite
@@ -27,14 +30,11 @@ jobs:
             cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
           run: |
             cd /usr/src
-            # 1. Сначала строим Мир (это долго, но нужно для ISO)
+            # buildworld и buildkernel подхватят файлы из кеша, если они там есть
             make -j$(sysctl -n hw.ncpu) buildworld
-            # 2. Строим твоё кастомное ядро
             make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
-            # 3. Теперь упаковываем всё в ISO
             cd release
             make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes
-            # 4. Копируем результат
             mkdir -p /tmp/artifacts
             cp /usr/obj/usr/src/amd64.amd64/release/disc1.iso /tmp/artifacts/jedi-freebsd-15.0.iso
 
