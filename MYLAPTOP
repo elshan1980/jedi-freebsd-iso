@@ -1,0 +1,13 @@
+include GENERIC
+ident MYLAPTOP
+
+# Твоё железо для Lenovo LOQ на базе Intel 13-го поколения
+device          ig4             # Шина I2C для тачпада
+device          ichid           # Драйвер тачпада
+device          iwlwifi         # Твой Intel Wi-Fi
+device          iwm_fw          # Прошивки для Wi-Fi Intel
+device          re              # Твой Ethernet Realtek
+
+# Отключаем лишнее для облегчения
+nodevice        fdc             # Нет дисковода
+nodevice        mpt             # Нет старых RAID
