@@ -6,6 +6,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+    - name: Cache FreeBSD Objects
+      uses: actions/cache@v4
+      with:
+        path: /usr/obj
+        key: freebsd-obj-${{ github.sha }}
+        restore-keys: |
+          freebsd-obj-
 
       - name: Build Everything and Make ISO
         uses: vmactions/freebsd-vm@v1
