@@ -7,8 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -18,7 +17,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/obj
-          # Этот ключ позволит подхватить наработки (libc и др.) из прошлого билда
           key: freebsd-obj-${{ github.run_id }}
           restore-keys: |
             freebsd-obj-
@@ -30,7 +28,6 @@ jobs:
           sync: true
           mem: 8192
           prepare: pkg install -y wget git-lite
-
           run: |
             # 1. Проверяем и подтягиваем исходники
             if [ ! -d "/usr/src/.git" ]; then
@@ -40,8 +37,8 @@ jobs:
 
             cd /usr/src
 
-            # 2. Сборка World (продолжаем с того же места благодаря -DNO_CLEAN)
-            echo "Starting buildworld with optimizations..."
+            # 2. Сборка World (используем кэш через -DNO_CLEAN)
+            echo "Starting buildworld..."
             make -j$(sysctl -n hw.ncpu) buildworld \
               -DNO_CLEAN \
               WITHOUT_DEBUG_FILES=yes \
@@ -49,10 +46,10 @@ jobs:
               WITHOUT_TESTS=yes \
               WITHOUT_TOOLCHAIN=yes
 
-            # 3. Сборка Ядра (используем твой MYLAPTOP)
+            # 3. Сборка Ядра (проект Sith)
             echo "Starting buildkernel..."
-            if [ -f "/home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP" ]; then
-              cp "/home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP" /usr/src/sys/amd64/conf/
+            if [ -f "$GITHUB_WORKSPACE/MYLAPTOP" ]; then
+              cp "$GITHUB_WORKSPACE/MYLAPTOP" /usr/src/sys/amd64/conf/
               make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP -DNO_CLEAN WITHOUT_DEBUG_FILES=yes
             else
               make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC -DNO_CLEAN WITHOUT_DEBUG_FILES=yes
@@ -63,13 +60,22 @@ jobs:
             cd /usr/src/release
             make release WITHOUT_DEBUG_FILES=yes NODOC=yes
 
-            # 5. Поиск и подготовка ISO к выгрузке
-            mkdir -p /home/runner/work/artifacts
-            find /usr/obj -name "*.iso" -exec cp {} /home/runner/work/artifacts/ \;
+            # 5. Поиск и подготовка ISO к выгрузке (Sith Logic)
+            echo "Copying artifacts..."
+            mkdir -p $GITHUB_WORKSPACE/artifacts
+            # Ищем во всех возможных местах компиляции
+            find /usr/obj -name "*.iso" -exec cp -v {} $GITHUB_WORKSPACE/artifacts/ \;
+            
+            # Если папка пуста — выводим структуру для диагностики
+            if [ -z "$(ls -A $GITHUB_WORKSPACE/artifacts)" ]; then
+              echo "!!! ISO NOT FOUND !!!"
+              echo "Checking release directory structure:"
+              ls -R /usr/obj/usr/src/amd64.amd64/release/ || echo "Release dir missing"
+            fi
 
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
           name: FreeBSD-15-Jedi-ISO
-          path: /home/runner/work/artifacts/*.iso
+          path: artifacts/*.iso
           if-no-files-found: error
