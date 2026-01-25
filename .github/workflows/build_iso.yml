@@ -29,15 +29,17 @@ jobs:
             cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
           run: |
             cd /usr/src
+            # Собираем мир и ядро (благодаря кешу это пройдет мгновенно)
             make -j$(sysctl -n hw.ncpu) buildworld
             make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
+            
+            # ВАЖНО: Устанавливаем ядро в систему перед созданием образа
+            make installkernel KERNCONF=MYLAPTOP DESTDIR=/usr/obj/usr/src/amd64.amd64/release/dist/kernel
+            
             cd release
+            # Добавляем KERNCONF и сюда
             make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes
+            
             mkdir -p /tmp/artifacts
             cp /usr/obj/usr/src/amd64.amd64/release/disc1.iso /tmp/artifacts/jedi-freebsd-15.0.iso
 
-      - name: Upload ISO
-        uses: actions/upload-artifact@v4
-        with:
-          name: Jedi-FreeBSD-ISO
-          path: /tmp/artifacts/jedi-freebsd-15.0.iso
