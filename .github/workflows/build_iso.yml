@@ -1,4 +1,4 @@
-name: Build Jedi ISO
+name: Jedi FreeBSD ISO Build
 
 on:
   push:
@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_iso:
+  build:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 360
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,45 +18,58 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/obj
-          key: freebsd-obj-${{ runner.os }}-${{ github.sha }}
+          # Этот ключ позволит подхватить наработки (libc и др.) из прошлого билда
+          key: freebsd-obj-${{ github.run_id }}
           restore-keys: |
-            freebsd-obj-${{ runner.os }}-
+            freebsd-obj-
 
-      - name: Build FreeBSD with NVIDIA
+      - name: Build FreeBSD ISO
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
           sync: true
           mem: 8192
-          # Готовим окружение и драйверы
-          prepare: |
-            pkg install -y git-lite nvidia-driver nvidia-xconfig
-            [ -d /usr/src/.git ] || git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
-          
+          prepare: pkg install -y wget git-lite
+
           run: |
-            # 1. Сборка системы
-            cd /usr/src
-            make -j$(sysctl -n hw.ncpu) buildworld
-            
-            # 2. Сборка ядра (GENERIC или MYLAPTOP если файл есть)
-            if [ -f /home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP ]; then
-              cp /home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP /usr/src/sys/amd64/conf/
-              make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
-            else
-              make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC
+            # 1. Проверяем и подтягиваем исходники
+            if [ ! -d "/usr/src/.git" ]; then
+              echo "Cloning FreeBSD source..."
+              git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
             fi
-            
-            # 3. Сборка ISO
-            cd release
-            make release
-            
-            # 4. Вытаскиваем ISO наружу
+
+            cd /usr/src
+
+            # 2. Сборка World (продолжаем с того же места благодаря -DNO_CLEAN)
+            echo "Starting buildworld with optimizations..."
+            make -j$(sysctl -n hw.ncpu) buildworld \
+              -DNO_CLEAN \
+              WITHOUT_DEBUG_FILES=yes \
+              WITHOUT_PROFILE=yes \
+              WITHOUT_TESTS=yes \
+              WITHOUT_TOOLCHAIN=yes
+
+            # 3. Сборка Ядра (используем твой MYLAPTOP)
+            echo "Starting buildkernel..."
+            if [ -f "/home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP" ]; then
+              cp "/home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP" /usr/src/sys/amd64/conf/
+              make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP -DNO_CLEAN WITHOUT_DEBUG_FILES=yes
+            else
+              make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC -DNO_CLEAN WITHOUT_DEBUG_FILES=yes
+            fi
+
+            # 4. Сборка самого образа ISO
+            echo "Starting release process..."
+            cd /usr/src/release
+            make release WITHOUT_DEBUG_FILES=yes NODOC=yes
+
+            # 5. Поиск и подготовка ISO к выгрузке
             mkdir -p /home/runner/work/artifacts
             find /usr/obj -name "*.iso" -exec cp {} /home/runner/work/artifacts/ \;
 
-      - name: Upload ISO
+      - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Jedi-FreeBSD-ISO
+          name: FreeBSD-15-Jedi-ISO
           path: /home/runner/work/artifacts/*.iso
           if-no-files-found: error
