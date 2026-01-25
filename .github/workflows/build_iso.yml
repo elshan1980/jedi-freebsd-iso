@@ -12,7 +12,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/obj
-          # Этот ключ заставит GitHub искать прошлые успешные части сборки
           key: freebsd-obj-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             freebsd-obj-${{ runner.os }}-
@@ -30,7 +29,6 @@ jobs:
             cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
           run: |
             cd /usr/src
-            # buildworld и buildkernel подхватят файлы из кеша, если они там есть
             make -j$(sysctl -n hw.ncpu) buildworld
             make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
             cd release
