@@ -43,5 +43,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Jedi-FreeBSD-ISO
-          path: ./*.iso
+          # Указываем точный путь, где FreeBSD собирает образы
+          path: /usr/obj/usr/src/amd64.amd64/release/*.iso
           retention-days: 5
