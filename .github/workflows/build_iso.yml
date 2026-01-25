@@ -1,14 +1,9 @@
-name: Jedi FreeBSD ISO Build
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+name: Build Jedi ISO
+on: [push, workflow_dispatch]
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-
+  build_iso:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,65 +12,34 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/obj
-          key: freebsd-obj-${{ github.run_id }}
+          key: freebsd-obj-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            freebsd-obj-${{ runner.os }}-
             freebsd-obj-
 
-      - name: Build FreeBSD ISO
+      - name: Build Everything and Make ISO
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
           sync: true
           mem: 8192
-          prepare: pkg install -y wget git-lite
+          prepare: |
+            pkg install -y git-lite
+            [ -d /usr/src/.git ] || git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
+            cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
           run: |
-            # 1. Проверяем и подтягиваем исходники
-            if [ ! -d "/usr/src/.git" ]; then
-              echo "Cloning FreeBSD source..."
-              git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
-            fi
-
             cd /usr/src
-
-            # 2. Сборка World (используем кэш через -DNO_CLEAN)
-            echo "Starting buildworld..."
-            make -j$(sysctl -n hw.ncpu) buildworld \
-              -DNO_CLEAN \
-              WITHOUT_DEBUG_FILES=yes \
-              WITHOUT_PROFILE=yes \
-              WITHOUT_TESTS=yes \
-              WITHOUT_TOOLCHAIN=yes
-
-            # 3. Сборка Ядра (проект Sith)
-            echo "Starting buildkernel..."
-            if [ -f "$GITHUB_WORKSPACE/MYLAPTOP" ]; then
-              cp "$GITHUB_WORKSPACE/MYLAPTOP" /usr/src/sys/amd64/conf/
-              make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP -DNO_CLEAN WITHOUT_DEBUG_FILES=yes
-            else
-              make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC -DNO_CLEAN WITHOUT_DEBUG_FILES=yes
-            fi
-
-            # 4. Сборка самого образа ISO
-            echo "Starting release process..."
-            cd /usr/src/release
-            make release WITHOUT_DEBUG_FILES=yes NODOC=yes
-
-            # 5. Поиск и подготовка ISO к выгрузке (Sith Logic)
-            echo "Copying artifacts..."
-            mkdir -p $GITHUB_WORKSPACE/artifacts
-            # Ищем во всех возможных местах компиляции
-            find /usr/obj -name "*.iso" -exec cp -v {} $GITHUB_WORKSPACE/artifacts/ \;
-            
-            # Если папка пуста — выводим структуру для диагностики
-            if [ -z "$(ls -A $GITHUB_WORKSPACE/artifacts)" ]; then
-              echo "!!! ISO NOT FOUND !!!"
-              echo "Checking release directory structure:"
-              ls -R /usr/obj/usr/src/amd64.amd64/release/ || echo "Release dir missing"
-            fi
+            make -j$(sysctl -n hw.ncpu) buildworld
+            make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
+            make installkernel KERNCONF=MYLAPTOP DESTDIR=/usr/obj/usr/src/amd64.amd64/release/dist/kernel
+            cd release
+            make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes
+            mkdir -p /tmp/artifacts
+            cp /usr/obj/usr/src/amd64.amd64/release/disc1.iso /tmp/artifacts/jedi-freebsd-15.0.iso
 
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FreeBSD-15-Jedi-ISO
-          path: artifacts/*.iso
+          name: FreeBSD-15-Sith-ISO
+          path: /tmp/artifacts/jedi-freebsd-15.0.iso
           if-no-files-found: error
