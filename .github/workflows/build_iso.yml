@@ -1,4 +1,4 @@
-name: Build Jedi ISO with NVIDIA
+name: Build Jedi ISO
 
 on:
   push:
@@ -17,53 +17,45 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/obj
-          # Используем уникальный ключ, чтобы кеш сохранялся корректно
-          key: freebsd-obj-${{ runner.os }}-${{ github.run_id }}
+          key: freebsd-obj-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
             freebsd-obj-${{ runner.os }}-
-            freebsd-obj-
 
-      - name: Build FreeBSD ISO
+      - name: Build FreeBSD with NVIDIA
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
           sync: true
           mem: 8192
-          # Предварительная подготовка: скачиваем исходники и ставим драйвер NVIDIA
+          # Готовим окружение и драйверы
           prepare: |
-            pkg install -y git-lite
+            pkg install -y git-lite nvidia-driver nvidia-xconfig
             [ -d /usr/src/.git ] || git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
-            # Копируем твой файл конфигурации ядра, если он есть в репозитории
-            [ -f MYLAPTOP ] && cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
-            # Установка драйверов NVIDIA в будущую систему (через порты/пакеты)
-            pkg install -y nvidia-driver nvidia-xconfig
           
           run: |
+            # 1. Сборка системы
             cd /usr/src
-            # 1. Сборка системы (благодаря кешу это будет быстро)
             make -j$(sysctl -n hw.ncpu) buildworld
             
-            # 2. Сборка твоего ядра (важно сделать это перед release)
-            # Если файла MYLAPTOP нет, замени на GENERIC
-            if [ -f /usr/src/sys/amd64/conf/MYLAPTOP ]; then
+            # 2. Сборка ядра (GENERIC или MYLAPTOP если файл есть)
+            if [ -f /home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP ]; then
+              cp /home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/MYLAPTOP /usr/src/sys/amd64/conf/
               make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
             else
               make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC
             fi
             
-            # 3. Создание ISO образа
+            # 3. Сборка ISO
             cd release
             make release
             
-            # 4. Перемещаем готовые ISO в рабочую папку GitHub для загрузки
-            mkdir -p /home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/output
-            cp /usr/obj/usr/src/amd64.amd64/release/*.iso /home/runner/work/jedi-freebsd-iso/jedi-freebsd-iso/output/ || true
+            # 4. Вытаскиваем ISO наружу
+            mkdir -p /home/runner/work/artifacts
+            find /usr/obj -name "*.iso" -exec cp {} /home/runner/work/artifacts/ \;
 
-      - name: Upload ISO Artifact
+      - name: Upload ISO
         uses: actions/upload-artifact@v4
         with:
-          name: Jedi-FreeBSD-NVIDIA-ISO
-          # Путь относительно корня репозитория
-          path: output/*.iso
+          name: Jedi-FreeBSD-ISO
+          path: /home/runner/work/artifacts/*.iso
           if-no-files-found: error
-          retention-days: 5
