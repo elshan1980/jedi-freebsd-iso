@@ -1,4 +1,4 @@
-name: Build Jedi ISO
+name: Build Sith ISO
 on: [push, workflow_dispatch]
 
 jobs:
@@ -8,15 +8,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache FreeBSD Objects
-        uses: actions/cache@v4
-        with:
-          path: /usr/obj
-          key: freebsd-obj-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            freebsd-obj-${{ runner.os }}-
-            freebsd-obj-
-
       - name: Build Everything and Make ISO
         uses: vmactions/freebsd-vm@v1
         with:
@@ -25,21 +16,32 @@ jobs:
           mem: 8192
           prepare: |
             pkg install -y git-lite
-            [ -d /usr/src/.git ] || git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
+            # Гарантируем наличие папки и исходников
+            mkdir -p /usr/src
+            if [ ! -d "/usr/src/.git" ]; then
+              echo "Cloning FreeBSD source..."
+              git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
+            fi
+            # Создаем путь для конфига и копируем его
+            mkdir -p /usr/src/sys/amd64/conf
             cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
           run: |
             cd /usr/src
+            # Собираем мир и ядро Sith
             make -j$(sysctl -n hw.ncpu) buildworld
             make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
+            
+            # Установка и создание ISO
             make installkernel KERNCONF=MYLAPTOP DESTDIR=/usr/obj/usr/src/amd64.amd64/release/dist/kernel
             cd release
             make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes
+            
+            # Перемещаем результат туда, где его найдет GitHub
             mkdir -p /tmp/artifacts
-            cp /usr/obj/usr/src/amd64.amd64/release/disc1.iso /tmp/artifacts/jedi-freebsd-15.0.iso
+            cp /usr/obj/usr/src/amd64.amd64/release/disc1.iso /tmp/artifacts/sith-freebsd-15.0.iso
 
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FreeBSD-15-Sith-ISO
-          path: /tmp/artifacts/jedi-freebsd-15.0.iso
-          if-no-files-found: error
+          name: Sith-FreeBSD-ISO
+          path: /tmp/artifacts/sith-freebsd-15.0.iso
