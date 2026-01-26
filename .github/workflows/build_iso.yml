@@ -12,37 +12,43 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build FreeBSD ISO
-        uses: vmactions/freebsd-builder@main
+      - name: Build ISO in FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
         with:
-          release: "15.0-CURRENT"
-          # Предварительная подготовка окружения
+          release: "15.0"
+          usesh: true
+          # Устанавливаем всё необходимое внутри виртуалки
           prepare: |
-            pkg install -y git-lite
+            pkg install -y git-lite drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
+          
           run: |
-            # 1. Установка драйверов для твоего Lenovo LOQ (Raptor Lake + RTX 4050)
-            pkg install -y drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
-            
-            # 2. Применение конфига Ситха из файла MYLAPTOP
+            # 1. Применяем конфиг из твоего файла MYLAPTOP
             if [ -f "MYLAPTOP" ]; then
-              echo "Applying MYLAPTOP configuration..."
+              echo "Applying Project Sith configuration..."
               cat MYLAPTOP >> /etc/rc.conf
-            else
-              echo "Warning: MYLAPTOP not found, using defaults."
             fi
-            
-            # 3. ПРИНУДИТЕЛЬНОЕ СОБЛЮДЕНИЕ ПРАВИЛА СИТХА (No SSH)
-            # Мы гарантируем, что SSH выключен, даже если он был включен ранее
+
+            # 2. ПРАВИЛО СИТХА: Выжигаем SSH каленым железом
+            # Мы не просто выключаем, мы гарантируем отсутствие доступа
             sysrc sshd_enable="NO"
             sed -i '' 's/sshd_enable="YES"/sshd_enable="NO"/' /etc/rc.conf
             rm -rf /etc/ssh/ssh_host_*
             
-            # 4. Команда сборки (стандартный вызов для создания установочного образа)
-            echo "Starting Sith ISO generation for FreeBSD 15.0..."
-            make -C /usr/src/release release NO_ROOT=yes
+            # 3. Сборка ISO (стандартный метод через release)
+            echo "Starting Sith ISO generation..."
+            cd /usr/src
+            # Если исходников нет, подтягиваем их (для 15-й ветки)
+            if [ ! -d "/usr/src/release" ]; then
+                git clone --depth 1 --branch main https://github.com/freebsd/freebsd-src.git /usr/src
+            fi
+            cd /usr/src/release
+            make release-iso NODOC=yes NOPORTS=yes
             
-      - name: Upload ISO Artifact
+            # Переносим готовый ISO в рабочую директорию для выгрузки
+            cp /usr/obj/usr/src/amd64.amd64/release/*.iso $GITHUB_WORKSPACE/
+
+      - name: Upload Sith ISO
         uses: actions/upload-artifact@v4
         with:
           name: Sith-FreeBSD-15-ISO
-          path: /usr/obj/usr/src/amd64.amd64/release/*.iso
+          path: ./*.iso
