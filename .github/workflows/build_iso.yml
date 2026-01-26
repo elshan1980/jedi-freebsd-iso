@@ -1,47 +1,59 @@
-name: Build Sith ISO
-on: [push, workflow_dispatch]
+name: Build Sith FreeBSD 15 Live KDE Clean
+
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
-  build_iso:
+  build_live_iso:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    timeout-minutes: 360
 
-      - name: Build Everything and Make ISO
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Clean Live ISO
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
           sync: true
           mem: 8192
+          # Добавляем больше места на диске для компиляции всего мира
+          copycache: true 
           prepare: |
-            pkg install -y git-lite
-            # Гарантируем наличие папки и исходников
-            mkdir -p /usr/src
-            if [ ! -d "/usr/src/.git" ]; then
-              echo "Cloning FreeBSD source..."
+            pkg install -y git-lite iwx-firmware drm-kmod plasma6-plasma sddm xwayland doas ca_root_nss dbus
+
+            # Клонируем исходники, если их нет
+            if [ ! -d /usr/src/.git ]; then
               git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
             fi
-            # Создаем путь для конфига и копируем его
+
             mkdir -p /usr/src/sys/amd64/conf
             cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
+
+            # Настройка конфигов для Live-образа
+            echo 'dbus_enable="YES"' >> /etc/rc.conf
+            echo 'sddm_enable="YES"' >> /etc/rc.conf
+            echo 'kld_list="i915kms"' >> /etc/rc.conf
+
           run: |
+            export MAKE_JOBS_NUMBER=$(sysctl -n hw.ncpu)
             cd /usr/src
-            # Собираем мир и ядро Sith
-            make -j$(sysctl -n hw.ncpu) buildworld
-            make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=MYLAPTOP
             
-            # Установка и создание ISO
-            make installkernel KERNCONF=MYLAPTOP DESTDIR=/usr/obj/usr/src/amd64.amd64/release/dist/kernel
+            # Сборка системы и ядра Sith
+            make -j$MAKE_JOBS_NUMBER buildworld
+            make -j$MAKE_JOBS_NUMBER buildkernel KERNCONF=MYLAPTOP
+
+            # Создание ISO
             cd release
-            make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes
+            make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes WITH_LIVECD=yes
             
-            # Перемещаем результат туда, где его найдет GitHub
+            # Собираем результат
             mkdir -p /tmp/artifacts
-            cp /usr/obj/usr/src/amd64.amd64/release/disc1.iso /tmp/artifacts/sith-freebsd-15.0.iso
+            find /usr/obj/usr/src/amd64.amd64/release/ -name "*.iso" -exec cp {} /tmp/artifacts/Sith-FreeBSD-15-KDE.iso \;
 
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Sith-FreeBSD-ISO
-          path: /tmp/artifacts/sith-freebsd-15.0.iso
+          name: Sith-FreeBSD-15.0-LIVE-KDE
+          path: /tmp/artifacts/Sith-FreeBSD-15-KDE.iso
