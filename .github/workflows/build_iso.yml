@@ -1,55 +1,19 @@
-name: Build Sith FreeBSD 15 ISO
+name: Project Sith Kit
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Build ISO in FreeBSD VM
-        uses: vmactions/freebsd-vm@v1
+      - uses: actions/checkout@v4
+      - name: Create Sith Setup Script
+        run: |
+          # Этот шаг просто упаковывает настройки в один архив
+          tar -cvf sith_kit.tar MYLAPTOP
+      - uses: actions/upload-artifact@v4
         with:
-          release: "14.1" # Используем стабильную базу для сборки 15-шки
-          usesh: true
-          sync: rsync # Важно для синхронизации файлов проекта внутрь VM
-          prepare: |
-            # Переключаем пакеты на ветку Latest (там есть всё для 15-й версии)
-            mkdir -p /usr/local/etc/pkg/repos
-            echo 'FreeBSD: { url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest" }' > /usr/local/etc/pkg/repos/FreeBSD.conf
-            pkg update -f
-            pkg install -y git-lite drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
-
-          run: |
-            # 1. Применяем твой конфиг Ситха
-            if [ -f "MYLAPTOP" ]; then
-              cat MYLAPTOP >> /etc/rc.conf
-            fi
-
-            # 2. ПРАВИЛО СИТХА: Смерть SSH
-            sysrc sshd_enable="NO"
-            echo 'sshd_enable="NO"' >> /etc/rc.conf
-            rm -rf /etc/ssh/ssh_host_*
-
-            # 3. Подтягиваем исходники 15-й ветки (Sith-base)
-            echo "Fetching FreeBSD 15 sources..."
-            git clone --depth 1 --branch main https://github.com/freebsd/freebsd-src.git /usr/src
-            
-            # 4. Сборка облегченного ISO (чтобы влезло в лимиты GitHub)
-            cd /usr/src/release
-            # Собираем только ISO, без лишнего мусора
-            make release-iso NODOC=yes NOPORTS=yes NOSRC=yes
-            
-            # Копируем результат
-            cp /usr/obj/usr/src/amd64.amd64/release/*.iso $GITHUB_WORKSPACE/
-
-      - name: Upload Sith ISO
-        uses: actions/upload-artifact@v4
-        with:
-          name: Sith-FreeBSD-15-ISO
-          path: ./*.iso
+          name: sith-config
+          path: sith_kit.tar
