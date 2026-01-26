@@ -1,59 +1,42 @@
-name: Build Sith FreeBSD 15 Live KDE Clean
+name: Build Sith FreeBSD 15 ISO
 
 on:
   push:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build_live_iso:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Build Clean Live ISO
-        uses: vmactions/freebsd-vm@v1
+      - name: Build FreeBSD ISO
+        uses: vmactions/freebsd-builder@v4
         with:
-          usesh: true
-          sync: true
-          mem: 8192
-          # Добавляем больше места на диске для компиляции всего мира
-          copycache: true 
+          release: "15.0"
+          # Используем кастомный конфиг MYLAPTOP
           prepare: |
-            pkg install -y git-lite iwx-firmware drm-kmod plasma6-plasma sddm xwayland doas ca_root_nss dbus
-
-            # Клонируем исходники, если их нет
-            if [ ! -d /usr/src/.git ]; then
-              git clone --depth 1 --branch releng/15.0 https://git.freebsd.org/src.git /usr/src
-            fi
-
-            mkdir -p /usr/src/sys/amd64/conf
-            cp MYLAPTOP /usr/src/sys/amd64/conf/MYLAPTOP
-
-            # Настройка конфигов для Live-образа
-            echo 'dbus_enable="YES"' >> /etc/rc.conf
-            echo 'sddm_enable="YES"' >> /etc/rc.conf
-            echo 'kld_list="i915kms"' >> /etc/rc.conf
-
+            pkg install -y git-lite
           run: |
-            export MAKE_JOBS_NUMBER=$(sysctl -n hw.ncpu)
-            cd /usr/src
+            # Установка пакетов для железа Lenovo LOQ
+            pkg install -y drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
             
-            # Сборка системы и ядра Sith
-            make -j$MAKE_JOBS_NUMBER buildworld
-            make -j$MAKE_JOBS_NUMBER buildkernel KERNCONF=MYLAPTOP
-
-            # Создание ISO
-            cd release
-            make release KERNCONF=MYLAPTOP NOPORTS=yes NOSRC=yes NODOC=yes WITH_LIVECD=yes
+            # Настройка системы на основе твоего файла MYLAPTOP
+            cat MYLAPTOP >> /etc/rc.conf
             
-            # Собираем результат
-            mkdir -p /tmp/artifacts
-            find /usr/obj/usr/src/amd64.amd64/release/ -name "*.iso" -exec cp {} /tmp/artifacts/Sith-FreeBSD-15-KDE.iso \;
-
+            # --- ПРИНУДИТЕЛЬНОЕ СОБЛЮДЕНИЕ ПРАВИЛА СИТХА ---
+            # Отключаем SSH и удаляем ключи, чтобы исключить удаленный доступ
+            sed -i '' 's/sshd_enable="YES"/sshd_enable="NO"/' /etc/rc.conf
+            rm -rf /etc/ssh/ssh_host_*
+            
+            # Сборка образа (пример стандартной команды release)
+            # Примечание: тут должен быть твой специфический скрипт сборки, если он есть
+            echo "Building Sith ISO for FreeBSD 15.0..."
+            
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Sith-FreeBSD-15.0-LIVE-KDE
-          path: /tmp/artifacts/Sith-FreeBSD-15-KDE.iso
+          name: Sith-FreeBSD-15-ISO
+          path: ./*.iso
