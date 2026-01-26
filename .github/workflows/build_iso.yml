@@ -15,36 +15,37 @@ jobs:
       - name: Build ISO in FreeBSD VM
         uses: vmactions/freebsd-vm@v1
         with:
-          release: "15.0"
+          release: "14.1" # Используем стабильную базу для сборки 15-шки
           usesh: true
-          # Устанавливаем всё необходимое внутри виртуалки
+          sync: rsync # Важно для синхронизации файлов проекта внутрь VM
           prepare: |
+            # Переключаем пакеты на ветку Latest (там есть всё для 15-й версии)
+            mkdir -p /usr/local/etc/pkg/repos
+            echo 'FreeBSD: { url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest" }' > /usr/local/etc/pkg/repos/FreeBSD.conf
+            pkg update -f
             pkg install -y git-lite drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
-          
+
           run: |
-            # 1. Применяем конфиг из твоего файла MYLAPTOP
+            # 1. Применяем твой конфиг Ситха
             if [ -f "MYLAPTOP" ]; then
-              echo "Applying Project Sith configuration..."
               cat MYLAPTOP >> /etc/rc.conf
             fi
 
-            # 2. ПРАВИЛО СИТХА: Выжигаем SSH каленым железом
-            # Мы не просто выключаем, мы гарантируем отсутствие доступа
+            # 2. ПРАВИЛО СИТХА: Смерть SSH
             sysrc sshd_enable="NO"
-            sed -i '' 's/sshd_enable="YES"/sshd_enable="NO"/' /etc/rc.conf
+            echo 'sshd_enable="NO"' >> /etc/rc.conf
             rm -rf /etc/ssh/ssh_host_*
+
+            # 3. Подтягиваем исходники 15-й ветки (Sith-base)
+            echo "Fetching FreeBSD 15 sources..."
+            git clone --depth 1 --branch main https://github.com/freebsd/freebsd-src.git /usr/src
             
-            # 3. Сборка ISO (стандартный метод через release)
-            echo "Starting Sith ISO generation..."
-            cd /usr/src
-            # Если исходников нет, подтягиваем их (для 15-й ветки)
-            if [ ! -d "/usr/src/release" ]; then
-                git clone --depth 1 --branch main https://github.com/freebsd/freebsd-src.git /usr/src
-            fi
+            # 4. Сборка облегченного ISO (чтобы влезло в лимиты GitHub)
             cd /usr/src/release
-            make release-iso NODOC=yes NOPORTS=yes
+            # Собираем только ISO, без лишнего мусора
+            make release-iso NODOC=yes NOPORTS=yes NOSRC=yes
             
-            # Переносим готовый ISO в рабочую директорию для выгрузки
+            # Копируем результат
             cp /usr/obj/usr/src/amd64.amd64/release/*.iso $GITHUB_WORKSPACE/
 
       - name: Upload Sith ISO
