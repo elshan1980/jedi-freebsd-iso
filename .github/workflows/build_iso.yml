@@ -13,31 +13,36 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build FreeBSD ISO
-        uses: vmactions/freebsd-builder@v3
+        uses: vmactions/freebsd-builder@main
         with:
           release: "15.0-CURRENT"
+          # Предварительная подготовка окружения
           prepare: |
             pkg install -y git-lite
           run: |
-            # Установка пакетов для железа Lenovo LOQ
+            # 1. Установка драйверов для твоего Lenovo LOQ (Raptor Lake + RTX 4050)
             pkg install -y drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
             
-            # Настройка системы на основе твоего файла MYLAPTOP
-            if [ -f MYLAPTOP ]; then
+            # 2. Применение конфига Ситха из файла MYLAPTOP
+            if [ -f "MYLAPTOP" ]; then
+              echo "Applying MYLAPTOP configuration..."
               cat MYLAPTOP >> /etc/rc.conf
+            else
+              echo "Warning: MYLAPTOP not found, using defaults."
             fi
             
-            # --- ПРИНУДИТЕЛЬНОЕ СОБЛЮДЕНИЕ ПРАВИЛА СИТХА ---
-            # Отключаем SSH и удаляем ключи
+            # 3. ПРИНУДИТЕЛЬНОЕ СОБЛЮДЕНИЕ ПРАВИЛА СИТХА (No SSH)
+            # Мы гарантируем, что SSH выключен, даже если он был включен ранее
+            sysrc sshd_enable="NO"
             sed -i '' 's/sshd_enable="YES"/sshd_enable="NO"/' /etc/rc.conf
-            echo 'sshd_enable="NO"' >> /etc/rc.conf
             rm -rf /etc/ssh/ssh_host_*
             
-            # Команда сборки образа (зависит от твоих внутренних скриптов)
-            echo "Building Sith ISO for FreeBSD 15.0..."
+            # 4. Команда сборки (стандартный вызов для создания установочного образа)
+            echo "Starting Sith ISO generation for FreeBSD 15.0..."
+            make -C /usr/src/release release NO_ROOT=yes
             
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Sith-FreeBSD-15-ISO
-          path: ./*.iso
+          path: /usr/obj/usr/src/amd64.amd64/release/*.iso
