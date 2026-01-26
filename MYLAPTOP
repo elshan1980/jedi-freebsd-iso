@@ -1,19 +1,39 @@
-include GENERIC
-ident MYLAPTOP
+# === Настройки проекта Sith (Lenovo LOQ 15IRX9) ===
 
-# ==========================================
-# Lenovo LOQ / Intel 13th Gen (i7-13650HX)
-# ==========================================
+# Имя хоста
+hostname="Sith"
 
-# I2C / Touchpad (уже в GENERIC, но явно)
-device          ig4
-device          ichid
+# --- Графика (Intel UHD + NVIDIA RTX 4050) ---
+# Загружаем drm-61-kmod для Raptor Lake и драйверы Nvidia
+kld_list="drm-61-kmod nvidia-modeset nmdm"
 
-# Intel Wi-Fi 6 / 6E (AX210 / AX211)
-device          iwx
+# --- Сетевые интерфейсы ---
+# Intel 700 Series Wi-Fi (iwlwifi)
+wlans_iwlwifi0="wlan0"
+ifconfig_wlan0="WPA DHCP"
+# Realtek Ethernet
+ifconfig_re0="DHCP"
 
-# Ethernet (Realtek)
-device          re
+# --- Оптимизация процессора i7-13650HX ---
+# Включаем микрокод Intel и управление питанием
+performance_cx_lowest="Cmax"
+economy_cx_lowest="Cmax"
+powerd_enable="YES"
+powerd_flags="-a hiadaptive -b adaptive"
 
-# Убираем реально мёртвое
-nodevice        fdc
+# --- Звук и Периферия ---
+snd_hda_load="YES"
+# Поддержка тачпада ITE/Elantech
+hw.psm.elantech_support="1"
+# Поддержка веб-камеры
+webcamd_enable="YES"
+
+# --- Безопасность (Правило Ситха) ---
+# Полный запрет SSH согласно инструкциям проекта
+sshd_enable="NO"
+sysrc -x sshd_enable
+clear_tmp_enable="YES"
+
+# --- Системные настройки ---
+dumpdev="AUTO"
+zfs_enable="YES"
