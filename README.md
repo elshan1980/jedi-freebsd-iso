@@ -28,7 +28,7 @@ disabled only if you explicitly accept that prompt.
 
 The profile targets one laptop, so review the selected modules and interface
 names before applying it. The helper does not configure Wi-Fi: confirm the
-actual interface name and set up `/etc/wpa_supplicant.conf) first.
+actual interface name and set up `/etc/wpa_supplicant.conf` first.
 [FreeBSD's graphics documentation](https://docs.freebsd.org/en/books/handbook/x11/)
 describes `drm-kmod` for Intel graphics and the NVIDIA DRM driver options.
 
