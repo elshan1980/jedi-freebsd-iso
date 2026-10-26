@@ -1,39 +1,35 @@
-# === Настройки проекта Sith (Lenovo LOQ 15IRX9) ===
+# === Sith profile: Lenovo LOQ 15IRX9 ===
+# Review each setting and merge it into /etc/rc.conf; do not replace that file.
 
-# Имя хоста
 hostname="Sith"
 
-# --- Графика (Intel UHD + NVIDIA RTX 4050) ---
-# Загружаем drm-61-kmod для Raptor Lake и драйверы Nvidia
-kld_list="drm-61-kmod nvidia-modeset nmdm"
+# Graphics modules from the current FreeBSD graphics profile.
+# Confirm support against the installed FreeBSD release and the exact hardware.
+kld_list="i915kms nvidia-drm"
 
-# --- Сетевые интерфейсы ---
-# Intel 700 Series Wi-Fi (iwlwifi)
+# Network interface names vary. Wi-Fi also needs credentials in
+# /etc/wpa_supplicant.conf before this can connect.
 wlans_iwlwifi0="wlan0"
 ifconfig_wlan0="WPA DHCP"
-# Realtek Ethernet
 ifconfig_re0="DHCP"
 
-# --- Оптимизация процессора i7-13650HX ---
-# Включаем микрокод Intel и управление питанием
+# CPU power management. Review behavior on the target system.
 performance_cx_lowest="Cmax"
 economy_cx_lowest="Cmax"
 powerd_enable="YES"
 powerd_flags="-a hiadaptive -b adaptive"
 
-# --- Звук и Периферия ---
+# Audio, touchpad, camera, and Intel CPU microcode.
 snd_hda_load="YES"
-# Поддержка тачпада ITE/Elantech
 hw.psm.elantech_support="1"
-# Поддержка веб-камеры
 webcamd_enable="YES"
+microcode_update_enable="YES"
 
-# --- Безопасность (Правило Ситха) ---
-# Полный запрет SSH согласно инструкциям проекта
-sshd_enable="NO"
-sysrc -x sshd_enable
+# Enable only when the installed system uses ZFS.
+# zfs_enable="YES"
+
+# Enable only when remote SSH access is not needed.
+# sshd_enable="NO"
+
 clear_tmp_enable="YES"
-
-# --- Системные настройки ---
 dumpdev="AUTO"
-zfs_enable="YES"
