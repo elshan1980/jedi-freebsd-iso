@@ -1,0 +1,29 @@
+name: Sith configuration
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Check setup script syntax
+        run: sh -n setup.sh
+      - name: Build configuration bundle
+        run: |
+          tar -czf sith-config.tar.gz MYLAPTOP setup.sh README.md
+          sha256sum sith-config.tar.gz
+      - name: Upload configuration bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: sith-config
+          path: sith-config.tar.gz
+          if-no-files-found: error
+          retention-days: 14
