@@ -1,29 +1,73 @@
 #!/bin/sh
-# Запускать как: sh setup.sh
+set -eu
 
-echo "Активация проекта Sith для Lenovo LOQ..."
+RC_CONF=/etc/rc.conf
 
-# 1. Скармливаем системе правильные репозитории
-mkdir -p /usr/local/etc/pkg/repos
-echo 'FreeBSD: { url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest" }' > /usr/local/etc/pkg/repos/FreeBSD.conf
+confirm() {
+    printf '%s [y/N] ' "$1"
+    IFS= read -r answer || answer=
+    case "${answer:-}" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
-# 2. Устанавливаем драйверы (Raptor Lake + RTX 4050) без вопросов
-env ASSUME_ALWAYS_YES=YES pkg install -y drm-61-kmod nvidia-driver-550 webcamd cpu-microcode-intel devcpu-data
+if [ "$(uname -s)" != "FreeBSD" ]; then
+    echo "This installer only runs on FreeBSD." >&2
+    exit 1
+fi
 
-# 3. Настраиваем конфиг (С учетом твоего Probe ID)
-cat <<EOF > /etc/rc.conf
-hostname="Sith"
-zfs_enable="YES"
-kld_list="drm-61-kmod nvidia-modeset"
-wlans_iwlwifi0="wlan0"
-ifconfig_wlan0="WPA DHCP"
-powerd_enable="YES"
-webcamd_enable="YES"
-# ПРАВИЛО СИТХА: SSH ЗАПРЕЩЕН
-sshd_enable="NO"
-EOF
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Run this script as root (for example, from a root shell)." >&2
+    exit 1
+fi
 
-# 4. Удаляем SSH ключи на всякий случай
-rm -rf /etc/ssh/ssh_host_*
+cat <<'NOTICE'
+Sith setup for Lenovo LOQ 15IRX9
+This will install graphics, webcam, and Intel microcode packages and update
+selected settings in /etc/rc.conf. Existing settings will be backed up first.
+Wi-Fi configuration and credentials are not changed.
+NOTICE
 
-echo "Готово! Перезагрузись и Sith оживет."
+if ! confirm "Continue?"; then
+    echo "Cancelled; no changes were made."
+    exit 0
+fi
+
+# These package names follow the current FreeBSD Handbook guidance.
+# pkg asks for confirmation before installing packages.
+pkg install drm-kmod nvidia-drm-kmod webcamd devcpu-data
+
+backup_dir="/var/backups/sith-setup-$(date +%Y%m%d-%H%M%S)-$$"
+mkdir -p "$backup_dir"
+if [ -f "$RC_CONF" ]; then
+    cp -p "$RC_CONF" "$backup_dir/rc.conf"
+    echo "Backed up $RC_CONF to $backup_dir/rc.conf"
+else
+    echo "No existing $RC_CONF was found; sysrc will create it."
+fi
+
+# Remove module names used by the old profile and add the current module names.
+sysrc -f "$RC_CONF" 'kld_list-=drm-61-kmod'
+sysrc -f "$RC_CONF" 'kld_list-=nvidia-modeset'
+sysrc -f "$RC_CONF" 'kld_list+=i915kms'
+sysrc -f "$RC_CONF" 'kld_list+=nvidia-drm'
+sysrc -f "$RC_CONF" webcamd_enable=YES
+sysrc -f "$RC_CONF" microcode_update_enable=YES
+sysrc -f "$RC_CONF" powerd_enable=YES
+sysrc -f "$RC_CONF" hostname=Sith
+
+if confirm "Disable the SSH server? This prevents remote SSH access."; then
+    sysrc -f "$RC_CONF" sshd_enable=NO
+else
+    echo "SSH setting left unchanged."
+fi
+
+cat <<NOTICE
+
+Setup finished. Review $RC_CONF and reboot when ready.
+Backup: $backup_dir/rc.conf (if an rc.conf existed)
+Wi-Fi was not configured. Confirm the interface name and set up
+/etc/wpa_supplicant.conf before enabling a wireless interface.
+Hardware support still needs to be checked on the target laptop.
+NOTICE
